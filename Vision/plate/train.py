@@ -46,7 +46,7 @@ class Classifier:
                 train_acc += (pred == label).sum().item()
                 train_loader_iter.set_postfix({'loss':loss.item()})
 
-            train_loss /= len(train_loss)
+            train_loss /= len(train_loader)
             train_acc = train_acc/len(train_loader.dataset)
 
             self.model.eval()
