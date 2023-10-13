@@ -51,7 +51,7 @@ class Classifier:
 
             self.model.eval()
             with torch.no_grad():
-                for images, labels in enumerate(val_loader):
+                for images, labels in val_loader:
                     image = images.to(self.device)
                     label = labels.to(self.device)
 
