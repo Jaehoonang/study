@@ -21,7 +21,7 @@ class EncoderDecoder(nn.Module):
         self.generator = generator
 
     def forward(self, src, tgt, src_mask, tgt_mask):
-        return  self.decode(self.encode(src, src_mask), src_mask, tgt, tgt_mask)
+        return self.decode(self.encode(src, src_mask), src_mask, tgt, tgt_mask)
 
     def encode(self, src, src_mask):
         return self.encoder(self.src_embed(src), src_mask)
@@ -225,7 +225,7 @@ class Batch:
         if tgt is not None:
             self.tgt = tgt[:, :-1]
             self.tgt_y = tgt[:, 1:]
-            self.tgt_mask = self.mask_std_mask(self.tgt, pad)
+            self.tgt_mask = self.make_std_mask(self.tgt, pad)
             self.ntokens = (self.tgt_y != pad).data.sum()
 
     def make_std_mask(tgt, pad):
@@ -283,4 +283,49 @@ class NoamOpt:
 
 def get_stp_opt(model):
     return NoamOpt(model.src_embed[0].d_model, 2, 4000,
-                   torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
+                   torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
+
+class LabelSmoothing(nn.Module):
+    def __init__(self, size, padding_idx, smoothing=0.0):
+        super(LabelSmoothing, self).__init__()
+        self.criterion = nn.KLDivLoss(reduction='sum')
+        self.padding_idx = padding_idx
+        self.confidence = 1.0 - smoothing
+        self.smoothing = smoothing
+        self.size = size
+        self.true_dist = None
+
+    def forward(self, x, target):
+        assert x.size(1) == self.size
+        true_dist = x.data.clone()
+        true_dist.fill_(self.smoothing / (self.size - 2))
+        true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
+        true_dist[:, self.padding_idx] = 0
+        mask = torch.nonzero(target.data == self.padding_idx)
+        if mask.dim() > 0:
+            true_dist.index_fill_(0, mask.squeeze(), 0.0)
+        self.true_dist = true_dist
+        return self.criterion(x, true_dist.clone().detach())
+
+def data_gen(V, batch, nbatches):
+    for i in range(nbatches):
+        data = torch.from_numpy(np.random.randint(1, V, size=(batch,10)))
+        data[:, 0] = 1
+        src = Variable(data, requires_grad=False)
+        tgt = Variable(data, requires_grad=False)
+        yield Batch(src, tgt, 0)
+
+
+gener = data_gen(11, 30, 20)
+
+for i, batch in enumerate(gener):
+    print("Source:")
+    print(batch.src.shape)
+    print("Target:")
+    print(batch.tgt.shape)
+    # batch.src_mask, batch.tgt_mask
+    print(batch.src_mask)
+    print(batch.tgt_mask)
+    # 필요한 경우 특정 배치까지만 확인
+    if i == 0:  # 첫 번째 배치만 확인
+        break
