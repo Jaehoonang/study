@@ -1,5 +1,5 @@
 import pandas as pd
-import numpy as np
+
 
 from sklearn.metrics import f1_score
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
@@ -86,7 +86,7 @@ class MLP(nn.Module):
         self.hidden_size3 = hidden_size3
         self.output_size = output_size
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(0.15)
+        self.dropout = nn.Dropout(0.2)
         self.fc1 = nn.Linear(input_size, hidden_size1)
         self.fc2 = nn.Linear(hidden_size1, hidden_size2)
         self.fc3 = nn.Linear(hidden_size2, hidden_size3)
@@ -133,7 +133,7 @@ def calculate_accuracy(outputs, targets):
 
 model = model.to(device)
 
-num_epochs = 1000
+num_epochs = 5000
 
 for epoch in tqdm(range(1, num_epochs + 1)):
     total_loss = 0.0
