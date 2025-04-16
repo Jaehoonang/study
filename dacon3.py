@@ -77,3 +77,31 @@ model2.fit(df_notnull[cols], df_notnull['기업가치(백억원)'])
 
 train_df.loc[train_df['기업가치(백억원)'].notnull(), '기업가치(백억원)'] = df_notnull['기업가치(백억원)']
 train_df.loc[train_df['기업가치(백억원)'].isnull(), '기업가치(백억원)'] = model2.predict(df_null[cols])
+
+a = test_df.copy()
+
+a['투자단계'] = encoder1.transform(a['투자단계'])
+a['국가'] = encoder2.transform(a['국가'])
+a['인수여부'] = encoder4.transform(a['인수여부'])
+a['상장여부'] = encoder5.transform(a['상장여부'])
+
+a_notnull = a.loc[a['분야'].notnull()]
+a_null = a.loc[a['분야'].isnull()]
+
+a_notnull['분야'] = encoder6.transform(a_notnull['분야'].values)
+
+a.loc[a['분야'].notnull(), '분야'] = a_notnull['분야']
+a.loc[a['분야'].isnull(), '분야'] = model0.predict(a_null[x.columns])
+
+a['직원 수'] = a.groupby(['국가', '투자단계'])['직원 수'].transform(lambda x: x.fillna(x.mean()))
+
+a_notnull = a[a['고객수(백만명)'].notnull()]
+a_null = a[a['고객수(백만명)'].isnull()]
+a.loc[a['고객수(백만명)'].isnull(), '고객수(백만명)'] = model1.predict(a_null[cols])
+
+a_notnull = a[a['기업가치(백억원)'].notnull()]
+a_null = a[a['기업가치(백억원)'].isnull()]
+
+a_notnull['기업가치(백억원)'] = encoder3.transform(a_notnull['기업가치(백억원)'].values)
+a.loc[a['기업가치(백억원)'].notnull(), '기업가치(백억원)'] = a_notnull['기업가치(백억원)']
+a.loc[a['기업가치(백억원)'].isnull(), '기업가치(백억원)'] = model2.predict(a_null[cols])
