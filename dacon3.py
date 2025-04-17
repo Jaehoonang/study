@@ -105,3 +105,44 @@ a_null = a[a['기업가치(백억원)'].isnull()]
 a_notnull['기업가치(백억원)'] = encoder3.transform(a_notnull['기업가치(백억원)'].values)
 a.loc[a['기업가치(백억원)'].notnull(), '기업가치(백억원)'] = a_notnull['기업가치(백억원)']
 a.loc[a['기업가치(백억원)'].isnull(), '기업가치(백억원)'] = model2.predict(a_null[cols])
+
+train_df['ROI'] = train_df['연매출(억원)'] / train_df['총 투자금(억원)']
+train_df['ARPU'] = train_df['연매출(억원)'] / train_df['고객수(백만명)']
+a['ROI'] = a['연매출(억원)'] / a['총 투자금(억원)']
+a['ARPU'] = a['연매출(억원)'] / a['고객수(백만명)']
+
+# for traing
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestRegressor
+
+y = train_df['성공확률']
+x = train_df.drop(columns=['성공확률'])
+dum_x = pd.get_dummies(x)
+test_x = pd.get_dummies(a)
+x_train, x_test, y_train, y_test = train_test_split(dum_x, y)
+params = {
+    'n_estimators': [400, 500, 600],
+    'max_depth': [None, 3, 5],
+    'min_samples_leaf': [1, 3, 5],
+    'max_features': ['auto', 'sqrt', 0.8],
+    'criterion' : ['absolute_error']
+}
+
+grid = GridSearchCV(RandomForestRegressor(), params, cv=5, scoring='neg_mean_absolute_error')
+grid.fit(x_train, y_train)
+
+print("Best params:", grid.best_params_)
+print("Best score:", -grid.best_score_)
+
+best_rr = RandomForestRegressor(max_features=0.8, min_samples_leaf=1, n_estimators=500, random_state=42)
+best_rr.fit(x_train, y_train)
+pred = best_rr.predict(x_test)
+print(mean_absolute_error(y_test, pred))
+
+pred_test = best_rr.predict(test_x)
+submission01 = pd.DataFrame()
+submission01['ID'] = test["ID"]
+submission01['성공확률'] = pred_test
+submission01.to_csv('submission02.csv', index=False)
