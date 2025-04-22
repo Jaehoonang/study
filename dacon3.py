@@ -116,25 +116,51 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import GridSearchCV
 from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
+from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.model_selection import cross_val_score
+import optuna
 
 y = train_df['성공확률']
 x = train_df.drop(columns=['성공확률'])
 dum_x = pd.get_dummies(x)
 test_x = pd.get_dummies(a)
 x_train, x_test, y_train, y_test = train_test_split(dum_x, y)
-params = {
-    'n_estimators': [400, 500, 600],
-    'max_depth': [None, 3, 5],
-    'min_samples_leaf': [1, 3, 5],
-    'max_features': ['auto', 'sqrt', 0.8],
-    'criterion' : ['absolute_error']
-}
+# params = {
+#     'n_estimators': [400, 500, 600],
+#     'max_depth': [None, 3, 5],
+#     'min_samples_leaf': [1, 3, 5],
+#     'max_features': ['auto', 'sqrt', 0.8],
+#     'criterion' : ['absolute_error']
+# }
+#
+# grid = GridSearchCV(RandomForestRegressor(), params, cv=5, scoring='neg_mean_absolute_error')
+# grid.fit(x_train, y_train)
+#
+# print("Best params:", grid.best_params_)
+# print("Best score:", -grid.best_score_)
+def object(trial):
+    params = {
+        'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+        'max_depth': trial.suggest_int('max_depth', 3, 15),
+        'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2),
+        'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+        'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+        'reg_alpha': trial.suggest_float('reg_alpha', 0, 1.0),
+        'reg_lambda': trial.suggest_float('reg_lambda', 0.5, 2.0)
+    }
 
-grid = GridSearchCV(RandomForestRegressor(), params, cv=5, scoring='neg_mean_absolute_error')
-grid.fit(x_train, y_train)
+    model = XGBRegressor(**params, random_state=42)
+    score = cross_val_score(model, x_train, y_train, scoring='neg_mean_squared_error', cv=3).mean()
+    return -score
 
-print("Best params:", grid.best_params_)
-print("Best score:", -grid.best_score_)
+
+study = optuna.create_study(direction='minimize')
+study.optimize(object, n_trials=50)
+
+print("Best params:", study.best_params)
+model = XGBRegressor(n_estimators=109, max_depth=3, learning_rate=0.0112, subsample=0.8819, colsample_bytree=0.7022, reg_alpha=0.421, reg_lambda=0.941, random_state=42, eval_metric='mae')
+model.fit(x_train, y_train)
 
 best_rr = RandomForestRegressor(max_features=0.8, min_samples_leaf=1, n_estimators=500, random_state=42)
 best_rr.fit(x_train, y_train)
