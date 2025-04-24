@@ -1,8 +1,18 @@
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import LabelEncoder
+import optuna
+
+from xgboost import XGBRegressor
+from catboost import CatBoostRegressor, Pool
+
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, VotingRegressor
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
+from sklearn.model_selection import cross_val_score, train_test_split
+
+from lightgbm import LGBMRegressor
+
 
 test = pd.read_csv('open3/test.csv')
 train = pd.read_csv('open3/train.csv')
@@ -106,42 +116,84 @@ a_notnull['기업가치(백억원)'] = encoder3.transform(a_notnull['기업가�
 a.loc[a['기업가치(백억원)'].notnull(), '기업가치(백억원)'] = a_notnull['기업가치(백억원)']
 a.loc[a['기업가치(백억원)'].isnull(), '기업가치(백억원)'] = model2.predict(a_null[cols])
 
+a['기업가치(백억원)'] = a['기업가치(백억원)'] + 1
+a['투자단계'] = a['투자단계'] + 1
+
+train_df['기업가치(백억원)'] = train_df['기업가치(백억원)'] + 1
+train_df['투자단계'] = train_df['투자단계'] + 1
 train_df['ROI'] = train_df['연매출(억원)'] / train_df['총 투자금(억원)']
 train_df['ARPU'] = train_df['연매출(억원)'] / train_df['고객수(백만명)']
+train_df['직원당매출'] = train_df['연매출(억원)'] / train_df['직원 수']
+# train_df['평균성장률'] = train_df['기업가치(백억원)'] / train_df['지속기간']
+train_df['sns'] = train_df['SNS 팔로워 수(백만명)'] / train_df['고객수(백만명)']
+train_df['고객성장률'] = train_df['고객수(백만명)'] / train_df['지속기간']
+
 a['ROI'] = a['연매출(억원)'] / a['총 투자금(억원)']
 a['ARPU'] = a['연매출(억원)'] / a['고객수(백만명)']
+a['직원당매출'] = a['연매출(억원)'] / a['직원 수']
+# a['평균성장률'] = a['기업가치(백억원)'] / a['지속기간']
+a['sns'] = a['SNS 팔로워 수(백만명)'] / a['고객수(백만명)']
+a['고객성장률'] = a['고객수(백만명)'] / a['지속기간']
 
-# for traing
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error
-from sklearn.model_selection import GridSearchCV
-from sklearn.ensemble import RandomForestRegressor
-from xgboost import XGBRegressor
-from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.model_selection import cross_val_score
-import optuna
+train_df['직원 수'] = np.log1p(train_df['직원 수'])
+train_df['고객수(백만명)'] = np.log1p(train_df['고객수(백만명)'])
+train_df['총 투자금(억원)'] = np.log1p(train_df['총 투자금(억원)'])
+train_df['연매출(억원)'] = np.log1p(train_df['연매출(억원)'])
+
+scaler = MinMaxScaler()
+scaled_cols = scaler.fit_transform(train_df[['직원 수', '고객수(백만명)', '총 투자금(억원)', '연매출(억원)']])
+train_df[['직원 수', '고객수(백만명)', '총 투자금(억원)', '연매출(억원)']] = scaled_cols
+
+a['직원 수'] = np.log1p(a['직원 수'])
+a['고객수(백만명)'] = np.log1p(a['고객수(백만명)'])
+a['총 투자금(억원)'] = np.log1p(a['총 투자금(억원)'])
+a['연매출(억원)'] = np.log1p(a['연매출(억원)'])
+
+scaled_cols = scaler.fit_transform(a[['직원 수', '고객수(백만명)', '총 투자금(억원)', '연매출(억원)']])
+a[['직원 수', '고객수(백만명)', '총 투자금(억원)', '연매출(억원)']] = scaled_cols
 
 y = train_df['성공확률']
 x = train_df.drop(columns=['성공확률'])
 dum_x = pd.get_dummies(x)
 test_x = pd.get_dummies(a)
-x_train, x_test, y_train, y_test = train_test_split(dum_x, y)
-# params = {
-#     'n_estimators': [400, 500, 600],
-#     'max_depth': [None, 3, 5],
-#     'min_samples_leaf': [1, 3, 5],
-#     'max_features': ['auto', 'sqrt', 0.8],
-#     'criterion' : ['absolute_error']
-# }
-#
-# grid = GridSearchCV(RandomForestRegressor(), params, cv=5, scoring='neg_mean_absolute_error')
-# grid.fit(x_train, y_train)
-#
-# print("Best params:", grid.best_params_)
-# print("Best score:", -grid.best_score_)
+x_train, x_test, y_train, y_test = train_test_split(dum_x, y, test_size=0.08)
+
+
+
+
+
+#optuna for forest
 def object(trial):
     params = {
         'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+        'max_depth': trial.suggest_int('max_depth', 3, 30),
+        'min_samples_split': trial.suggest_int('min_samples_split', 2, 10),
+        'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 10),
+        'max_features': trial.suggest_float('max_features', 0.1, 1.0),
+        'bootstrap': trial.suggest_categorical('bootstrap', [True, False]),
+        'random_state': 42,
+        'n_jobs': -1
+    }
+
+    model = RandomForestRegressor(**params)
+    score = cross_val_score(model, x_train, y_train, cv=5, scoring='neg_root_mean_squared_error')
+    return -score.mean()
+
+study = optuna.create_study(direction='minimize')
+study.optimize(object, n_trials=50)
+
+print("Best params:", study.best_params)
+
+RandomForestRegressor(n_estimators=945, max_depth=21, min_samples_split=4, min_samples_leaf=1, max_features=0.28411362712866717, bootstrap=True, random_state=42)best_rr =
+best_rr.fit(x_train, y_train)
+pred = best_rr.predict(x_test)
+print(mean_absolute_error(y_test, pred))
+pred_test = best_rr.predict(test_x)
+
+#optuna for XGB
+def object(trial):
+    params = {
+        'n_estimators': trial.suggest_int('n_estimators', 50, 1000),
         'max_depth': trial.suggest_int('max_depth', 3, 15),
         'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2),
         'subsample': trial.suggest_float('subsample', 0.6, 1.0),
@@ -159,16 +211,81 @@ study = optuna.create_study(direction='minimize')
 study.optimize(object, n_trials=50)
 
 print("Best params:", study.best_params)
-model = XGBRegressor(n_estimators=109, max_depth=3, learning_rate=0.0112, subsample=0.8819, colsample_bytree=0.7022, reg_alpha=0.421, reg_lambda=0.941, random_state=42, eval_metric='mae')
-model.fit(x_train, y_train)
 
-best_rr = RandomForestRegressor(max_features=0.8, min_samples_leaf=1, n_estimators=500, random_state=42)
-best_rr.fit(x_train, y_train)
-pred = best_rr.predict(x_test)
-print(mean_absolute_error(y_test, pred))
 
-pred_test = best_rr.predict(test_x)
+
+model_xgb = XGBRegressor(n_estimators=104, max_depth=12, learning_rate=0.026888816720944776, subsample=0.6822156907095462, colsample_bytree= 0.9952793703123048, reg_alpha=0.9287594490356247, reg_lambda=1.9210118926583737, random_state=42, eval_metric='mae')
+model_xgb.fit(x_train, y_train)
+pred_xgb = model_xgb.predict(x_test)
+print(mean_absolute_error(y_test, pred_xgb), r2_score(y_test, pred_xgb))
+pred_test = model_xgb.predict(test_x)
+
+train_pool = Pool(x_train, y_train)
+valid_pool = Pool(x_test, y_test)
+
+def objective(trial):
+    params = {
+        "iterations": 1000,
+        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3),
+        "depth": trial.suggest_int("depth", 4, 10),
+        "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1.0, 10.0),
+        "random_strength": trial.suggest_float("random_strength", 0.0, 1.0),
+        "bagging_temperature": trial.suggest_float("bagging_temperature", 0.0, 1.0),
+        "border_count": trial.suggest_int("border_count", 32, 255),
+        "loss_function": "MAE",
+        "eval_metric": "MAE",
+        "early_stopping_rounds": 50,
+        "verbose": 0,
+        "random_seed": 42
+    }
+
+    model = CatBoostRegressor(**params)
+    model.fit(train_pool, eval_set=valid_pool, use_best_model=True)
+    preds = model.predict(x_test)
+    mae = mean_absolute_error(y_test, preds)
+    return mae
+
+# Optuna 최적화 실행
+study = optuna.create_study(direction="minimize")
+study.optimize(objective, n_trials=30)
+
+print("Best MAE:", study.best_value)
+print("Best Params:", study.best_params)
+
+cat_features = x.select_dtypes(include=["object"]).columns.tolist()
+model_cat = CatBoostRegressor(
+    iterations=3000,
+    learning_rate=0.1884120270980683,
+    depth=6,
+    l2_leaf_reg=4.007163440040909,
+    loss_function='MAE',
+    early_stopping_rounds=100,
+    verbose=100,
+    random_strength=0.6260476533631646,
+    bagging_temperature=0.23389681577968308,
+    border_count=129
+)
+
+model_cat.fit(x_train, y_train, eval_set=(x_test,y_test))
+pred_cat = model_cat.predict(x_test)
+mae = mean_absolute_error(y_test, pred_cat)
+print("MAE:", mae)
+pred_test = model_cat.predict(test_x)
+
+voting_model = VotingRegressor([
+    ('model_cat', model_cat),
+    ('model_xgb', model_xgb),
+    ('best_rr', best_rr)
+])
+
+voting_model.fit(x_train, y_train)
+pred_voting = voting_model.predict(x_test)
+rmse_voting = mean_squared_error(y_test, pred_voting)
+print("Voting Regressor RMSE:", rmse_voting)
+print("Voting Regressor MAE:", mean_absolute_error(y_test, pred_voting))
+pred_test = voting_model.predict(test_x)
+
 submission01 = pd.DataFrame()
 submission01['ID'] = test["ID"]
 submission01['성공확률'] = pred_test
-submission01.to_csv('submission02.csv', index=False)
+submission01.to_csv('submission18.csv', index=False)
