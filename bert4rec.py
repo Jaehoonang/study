@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -71,6 +72,32 @@ class SeqDataset(Dataset):
         masked_seq, labels = mask_sequence(seq, self.mask_token_id)
         return torch.tensor(masked_seq), torch.tensor(labels)
 
+def evaluate(model, test_tuples, item_num, mask_token_id, top_k=10):
+    model.eval()
+    hits, ndcgs = [], []
+    with torch.no_grad():
+        for seq, true_item in test_tuples:
+            seq = seq[-50:]
+            pad_len = 50 - len(seq)
+            seq = [0]
+            input_tensor = torch.tensor([seq], device=device)
+            logits = model(input_tensor)
+            scores = logits[0,-1]
+            _, topk_items = torch.topk(scores, top_k)
+
+            topk_items = topk_items.tolist()
+            hit = int(true_item in topk_items)
+            hits.append(hit)
+
+            if hit:
+                rank = topk_items.index(true_item) + 1
+                ndcgs.append(1 / np.log2(rank + 1))
+            else:
+                ndcgs.append(0)
+    hr = np.mean(hits)
+    ndcg = np.mean(ndcgs)
+    print(f'HR@{top_k}: {hr:.4f}, NDCG@{top_k}: {ndcg:.4f}')
+
 def train():
     max_len = 50
     batch_size = 128
@@ -78,6 +105,15 @@ def train():
     lr = 1e-4
     user_sequences, num_items = load_movielens_100k('u.data')  # 경로 확인 필요
     mask_token_id = num_items + 1
+
+    train_seqs = []
+    test_tuples = []
+
+    for seq in user_sequences:
+        if len(seq) <2:
+            continue
+        train_seqs.append(seq[:-1])
+        test_tuples.append((seq[:-1], seq[-1]))
 
     model = BERT4Rec(num_items, max_len)
     model = model.to(device)
@@ -106,6 +142,8 @@ def train():
 
         avg_loss = total_loss / len(train_loader)
         print(f'Epoch {epoch+1}: Loss = {total_loss:.4f}')
+
+    evaluate(model, test_tuples, num_items, mask_token_id, top_k=10)
 
 if __name__ == "__main__":
     train()
