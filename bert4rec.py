@@ -26,7 +26,7 @@ def load_movielens_100k(path="C:/Users/2wkd/Desktop/study/u.data"):
     return sequences, item_num
 
 class BERT4Rec(nn.Module):
-    def __init__(self, num_items, hidden_dim=128, max_len=50, n_layers=2, n_heads=2, dropout=0.1):
+    def __init__(self, num_items, hidden_dim=64, max_len=50, n_layers=2, n_heads=2, dropout=0.2):
         super(BERT4Rec, self).__init__()
         self.item_embedding = nn.Embedding(num_items + 2, hidden_dim, padding_idx=0)
         self.position_embedding = nn.Embedding(max_len, hidden_dim)
@@ -101,7 +101,7 @@ def evaluate(model, test_tuples, item_num, mask_token_id, top_k=10):
 def train():
     max_len = 50
     batch_size = 128
-    epochs = 10
+    epochs = 100
     lr = 1e-4
     user_sequences, num_items = load_movielens_100k('u.data')  # 경로 확인 필요
     mask_token_id = num_items + 1
@@ -123,7 +123,7 @@ def train():
     train_dataset = SeqDataset(user_sequences, max_len, mask_token_id)
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
-    for epoch in range(10):
+    for epoch in range(epochs):
         model.train()
         total_loss = 0
         for masked_seq ,labels in train_loader:
@@ -141,7 +141,7 @@ def train():
             total_loss += loss.item()
 
         avg_loss = total_loss / len(train_loader)
-        print(f'Epoch {epoch+1}: Loss = {total_loss:.4f}')
+        print(f'Epoch {epoch+1}: Loss = {avg_loss:.4f}')
 
     evaluate(model, test_tuples, num_items, mask_token_id, top_k=10)
 
