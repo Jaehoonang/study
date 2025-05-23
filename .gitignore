@@ -1,4 +1,10 @@
 .env
+langgraph_agent/.env
+langgraph_agent/PRJ_01_LangChain_ToolCalling.ipynb
+langgraph_agent/PRJ_02_LangGraph_StateGraph.ipynb
+langgraph_agent/PRJ_03_LangGraph_MessageGraph.ipynb
+langgraph_agent/PRJ_04_LangGraph_ReAct_Memory.ipynb
+langgraph_agent/PRJ_05_LangGraph_AgenticRAG.ipynb
 
 results/
 ml-100k/ml-100k/
